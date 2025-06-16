@@ -1,0 +1,1 @@
+# create-fungible-token-on-aptos
