@@ -1,0 +1,19 @@
+[package]
+name = "token"
+version = "1.0.0"
+authors = []
+
+[addresses]
+aptos_asset = "0xf8c3674df2494f019da81069a64d886da5b0079fa02a5e35309ebcb952ebfd14"
+std = "0x1"
+aptos_framework = "0x1"
+aptos_std = "0x1"
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-framework"
+
+[dev-dependencies]
