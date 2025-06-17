@@ -6,8 +6,10 @@ authors = []
 [addresses]
 aptos_asset = "0xf8c3674df2494f019da81069a64d886da5b0079fa02a5e35309ebcb952ebfd14"
 std = "0x1"
-aptos_framework = "0x1"
 aptos_std = "0x1"
+aptos_framework = "0x1"
+aptos_token = "0x3"
+aptos_token_objects = "0x4"
 
 [dev-addresses]
 
@@ -15,5 +17,14 @@ aptos_std = "0x1"
 git = "https://github.com/aptos-labs/aptos-framework.git"
 rev = "mainnet"
 subdir = "aptos-framework"
+
+
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "testnet" }
+AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib", rev = "testnet" }
+AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token", rev = "testnet" }
+AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token-objects", rev = "testnet" }
+
+
+
 
 [dev-dependencies]

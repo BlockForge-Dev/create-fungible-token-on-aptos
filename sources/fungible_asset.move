@@ -10,7 +10,7 @@ module aptos_asset::fungible_asset{
     /// Only fungible asset metadata owner can make changes.
     const ENOT_OWNER: u64 = 1;
 
-    const ASSET_SYMBOL: vector<u8> = b"META";
+    const ASSET_SYMBOL: vector<u8> = b"BLOCKFORGE";
 
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
     /// Hold refs to control the minting, transfer and burning of fungible assets.
@@ -27,7 +27,7 @@ module aptos_asset::fungible_asset{
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
             constructor_ref,
             option::none(),
-            utf8(b"META Coin"), /* name */
+            utf8(b"BLOCKFORGE Coin"), /* name */
             utf8(ASSET_SYMBOL), /* symbol */
             8, /* decimals */
             utf8(b"https://drive.google.com/file/d/1vFm-kF6O3onxPgFJ_rVLh9YGFT_fFWM6/view?usp=sharing"), /* icon */
