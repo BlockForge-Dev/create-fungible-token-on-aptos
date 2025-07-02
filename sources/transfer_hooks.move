@@ -1,131 +1,55 @@
 module aptos_asset::transfer_hooks {
-    use aptos_framework::fungible_asset;
-    use aptos_framework::object;
+    use aptos_framework::fungible_asset::{TransferRef, BurnRef, Metadata, withdraw_with_ref, deposit_with_ref, burn};
+    use aptos_framework::object::Object;
     use aptos_framework::primary_fungible_store;
     use std::error;
-    use std::signer;
-    use std::option; // ❗ Required for `option::some`
 
-    use aptos_asset::fungible_asset::{FungibleAsset, Metadata}; // ✅ No `Self` (already aliased)
-    use aptos_asset::account_control;
+    const EZERO_AMOUNT: u64 = 0xE10;
+    const EINVALID_FEE: u64 = 0xE11;
 
+    const DEFAULT_FEE_BASIS_POINTS: u64 = 50; // 0.5%
+    const DEFAULT_BURN_BASIS_POINTS: u64 = 20; // 0.2%
+    const FEE_COLLECTOR: address = @0x123;
 
-    /// Fee configuration for the token
-    struct FeeConfig has key {
-        burn_percentage: u64,  // Basis points (500 = 5%)
-        fee_recipient: address,
-        fee_collector_cap: fungible_asset::TransferRef
-    }
-
-    /// Error codes
-    const ENOT_TOKEN_ADMIN: u64 = 1000;
-    const EHOOK_NOT_ENABLED: u64 = 1001;
-    const EINVALID_FEE_CONFIG: u64 = 1002;
-
-    // ========== Admin Functions ==========
-
-    /// Initialize transfer hooks for the token
-    public entry fun initialize(
-        admin: &signer,
-        token: Object<Metadata>,
-        burn_percentage: u64,
-        fee_recipient: address
-    ) acquires FeeConfig {
-        assert!(
-            object::is_owner(token, signer::address_of(admin)),
-            error::permission_denied(ENOT_TOKEN_ADMIN)
-        );
-        assert!(burn_percentage <= 10_000, error::invalid_argument(EINVALID_FEE_CONFIG));
-
-        let transfer_ref = fungible_asset::generate_transfer_ref(&object::object_address(&token));
-        move_to(
-            admin,
-            FeeConfig {
-                burn_percentage,
-                fee_recipient,
-                fee_collector_cap: transfer_ref
-            }
-        );
-
-        // Enable transfer hook on the token
-        fungible_asset::set_transfer_hook(
-            &object::generate_signer(&object::object_address(&token)),
-            option::some(b"apply_transfer_fee")
-        );
-    }
-
-    // ========== Hook Implementation ==========
-
-    /// The actual transfer hook that gets called on every transfer
-    public fun apply_transfer_fee(
-        token: Object<Metadata>,
-        from: address,
-        to: address,
+    public fun transfer_with_hook(
+        _admin: &signer,
+        asset: Object<Metadata>,
+        burn_ref: &BurnRef,
+        transfer_ref: &TransferRef,
+        sender: address,
+        recipient: address,
         amount: u64
-    ) acquires FeeConfig {
-        // Skip fees for certain privileged operations
-        if (is_exempt_transfer(from, to)) return;
+    ) {
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
 
-        let fee_config = borrow_global<FeeConfig>(object::object_address(&token));
-        let fee_amount = (amount * fee_config.burn_percentage) / 10_000;
-        let remaining_amount = amount - fee_amount;
+        let sender_wallet = primary_fungible_store::primary_store(sender, asset);
+        let recipient_wallet = primary_fungible_store::ensure_primary_store_exists(recipient, asset);
+        let fee_wallet = primary_fungible_store::ensure_primary_store_exists(FEE_COLLECTOR, asset);
 
-        // Process the burn
-        if (fee_amount > 0) {
-            let from_store = primary_fungible_store::primary_store(from, token);
-            let fa = fungible_asset::withdraw_with_ref(
-                &fee_config.fee_collector_cap,
-                from_store,
-                fee_amount
-            );
-            fungible_asset::burn(&fa);
-        };
+        let fee_amount = compute_fee(amount);
+        let burn_amount = compute_burn(amount);
+        let transfer_amount = amount - fee_amount - burn_amount;
 
-        // Continue with original transfer
-        let from_store = primary_fungible_store::primary_store(from, token);
-        let to_store = primary_fungible_store::ensure_primary_store_exists(to, token);
-        fungible_asset::transfer_with_ref(
-            &fee_config.fee_collector_cap,
-            from_store,
-            to_store,
-            remaining_amount
-        );
+        assert!(transfer_amount > 0, error::invalid_argument(EINVALID_FEE));
+
+        // Withdraw and apply burn
+        let burn_part = withdraw_with_ref(transfer_ref, sender_wallet, burn_amount);
+        burn(burn_ref, burn_part);
+
+        // Withdraw and deposit fee
+        let fee_part = withdraw_with_ref(transfer_ref, sender_wallet, fee_amount);
+        deposit_with_ref(transfer_ref, fee_wallet, fee_part);
+
+        // Withdraw and send to recipient
+        let user_part = withdraw_with_ref(transfer_ref, sender_wallet, transfer_amount);
+        deposit_with_ref(transfer_ref, recipient_wallet, user_part);
     }
 
-    // ========== Utility Functions ==========
-
-    /// Check if transfer should be exempt from fees (admin ops, contract interactions)
-    fun is_exempt_transfer(from: address, to: address): bool {
-        // Example exemptions:
-        // 1. Mint/burn addresses
-        // 2. Contract-controlled addresses
-        // 3. Fee recipient itself
-        false // Default to no exemptions
+    fun compute_fee(amount: u64): u64 {
+        (amount * DEFAULT_FEE_BASIS_POINTS) / 10_000
     }
 
-    /// Update fee configuration
-    public entry fun update_fee_config(
-        admin: &signer,
-        token: Object<Metadata>,
-        new_burn_percentage: u64,
-        new_fee_recipient: address
-    ) acquires FeeConfig {
-        assert!(
-            object::is_owner(token, signer::address_of(admin)),
-            error::permission_denied(ENOT_TOKEN_ADMIN)
-        );
-        assert!(new_burn_percentage <= 10_000, error::invalid_argument(EINVALID_FEE_CONFIG));
-
-        let fee_config = borrow_global_mut<FeeConfig>(object::object_address(&token));
-        fee_config.burn_percentage = new_burn_percentage;
-        fee_config.fee_recipient = new_fee_recipient;
-    }
-
-    // ========== View Functions ==========
-
-    /// Get current fee configuration
-    public fun get_fee_config(token: Object<Metadata>): (u64, address) acquires FeeConfig {
-        let fee_config = borrow_global<FeeConfig>(object::object_address(&token));
-        (fee_config.burn_percentage, fee_config.fee_recipient)
+    fun compute_burn(amount: u64): u64 {
+        (amount * DEFAULT_BURN_BASIS_POINTS) / 10_000
     }
 }

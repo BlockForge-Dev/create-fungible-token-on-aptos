@@ -38,6 +38,15 @@ struct EmissionState has key {
     total_emitted: u64,
 }
 
+
+
+struct Refs {
+    burn_ref: BurnRef,
+    transfer_ref: TransferRef,
+}
+
+
+
         /// Capability to mint new tokens
     struct MintCapability has key {}
 
@@ -230,6 +239,29 @@ spec burn {
         let from_wallet = primary_fungible_store::primary_store(from, asset);
         fungible_asset::burn_from(burn_ref, from_wallet, amount);
     }
+
+
+public entry fun transfer_with_fee_and_burn(admin: &signer, from: address, to: address, amount: u64)
+acquires ManagedFungibleAsset {
+    account_control::assert_not_locked(from);
+    account_control::assert_not_locked(to);
+
+    let asset = get_metadata();
+   
+
+ let refs = authorized_borrow_refs(admin, asset);
+aptos_asset::transfer_hooks::transfer_with_hook(
+    admin,
+    asset,
+    &refs.burn_ref,
+    &refs.transfer_ref,
+    from,
+    to,
+    amount
+);
+
+}
+
 
 spec freeze_account {
     // ✅ Emission state must remain unchanged
